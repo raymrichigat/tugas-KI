@@ -75,6 +75,20 @@ def convert_bits_to_hex(bit_array):
     hex_len = len(bit_array) // 4
     return hex(int(bit_string, 2))[2:].upper().zfill(hex_len)
 
+def pad_pkcs7(data):
+    """PKCS7 padding untuk DES (8 bytes block)"""
+    pad_len = 8 - (len(data) % 8)
+    return data + bytes([pad_len]) * pad_len
+
+def unpad_pkcs7(data):
+    """Remove PKCS7 padding"""
+    if not data:
+        return data
+    pad_len = data[-1]
+    if pad_len > 8 or pad_len < 1:
+        return data
+    return data[:-pad_len]
+
 def perform_xor(bits_a, bits_b):
     """Operasi XOR pada dua array bit"""
     output = []
@@ -147,3 +161,50 @@ def process_single_block(input_data, key_bits, is_encrypt):
     
     combined = right_part + left_part
     return apply_table(combined, FINAL_PERMUTATION)
+
+def des_encrypt(plaintext_bytes, key_bytes):
+    """Encrypt plaintext bytes dengan DES ECB mode"""
+    if len(key_bytes) != 8:
+        raise ValueError("Key must be exactly 8 bytes")
+    
+    # PKCS7 padding
+    padded = pad_pkcs7(plaintext_bytes)
+    
+    # Convert to bits
+    key_bits = convert_text_to_bits(key_bytes.decode('latin-1'))
+    
+    # Process each block
+    ciphertext = bytearray()
+    for i in range(0, len(padded), 8):
+        block = padded[i:i+8]
+        block_bits = convert_text_to_bits(block.decode('latin-1'))
+        cipher_bits = process_single_block(block_bits, key_bits, True)
+        
+        # Convert back to bytes
+        cipher_hex = convert_bits_to_hex(cipher_bits)
+        ciphertext.extend(bytes.fromhex(cipher_hex))
+    
+    return bytes(ciphertext)
+
+def des_decrypt(ciphertext_bytes, key_bytes):
+    """Decrypt ciphertext bytes dengan DES ECB mode"""
+    if len(key_bytes) != 8:
+        raise ValueError("Key must be exactly 8 bytes")
+    
+    # Convert to bits
+    key_bits = convert_text_to_bits(key_bytes.decode('latin-1'))
+    
+    # Process each block
+    plaintext = bytearray()
+    for i in range(0, len(ciphertext_bytes), 8):
+        block = ciphertext_bytes[i:i+8]
+        block_hex = block.hex().upper()
+        block_bits = convert_hex_to_bits(block_hex)
+        plain_bits = process_single_block(block_bits, key_bits, False)
+        
+        # Convert back to bytes
+        plain_text = convert_bits_to_text(plain_bits)
+        plaintext.extend(plain_text.encode('latin-1'))
+    
+    # Remove padding
+    return unpad_pkcs7(bytes(plaintext))
